@@ -1,0 +1,5 @@
+{
+  "name": "system.ns",
+  "description": "A high-performance productivity and gym nutrition tracker tailored for specific bulking goals. Tracks daily protein, calories, and schedule adherence with AI coaching support.",
+  "requestFramePermissions": []
+}
