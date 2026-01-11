@@ -16,7 +16,7 @@ import { Auth } from './components/Auth';
 import { FoodPyramid } from './components/FoodPyramid';
 import { NutrientGuide } from './components/NutrientGuide';
 import { BatchInput } from './components/BatchInput';
-import { Dumbbell, LayoutDashboard, CalendarDays, Plus, Trash2, Trophy, Menu, Save, CheckCircle, WifiOff, Database, Terminal } from 'lucide-react';
+import { Dumbbell, LayoutDashboard, CalendarDays, Plus, Trash2, Trophy, Menu, Save, CheckCircle, WifiOff, Database, Terminal, LogOut, ToggleLeft, ToggleRight, Power, RefreshCw } from 'lucide-react';
 import { HistoryState, DayLog, User } from './types';
 import { api } from './services/api';
 
@@ -30,19 +30,20 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryState>({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  
+  // New State: Auto-Save Toggle
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
 
   // --- Auth Check ---
   useEffect(() => {
     // We handle auth via the Auth component
   }, []);
 
-  // --- Auto-Save Logic (Debounced) ---
-  useEffect(() => {
+  // --- Save Function ---
+  const saveData = useCallback(async () => {
     if (!user) return;
-
-    const timeoutId = setTimeout(async () => {
-      setIsSyncing(true);
-      try {
+    setIsSyncing(true);
+    try {
         if (user.token === 'offline-token') {
              // Offline Mode: Save to LocalStorage
              localStorage.setItem('system_os_history', JSON.stringify(history));
@@ -54,19 +55,34 @@ const App: React.FC = () => {
              await api.syncData(user.token, history);
         }
         setLastSaved(new Date());
-      } catch (err) {
-        console.error("Auto-save failed:", err);
-      } finally {
+    } catch (err) {
+        console.error("Save failed:", err);
+    } finally {
         setIsSyncing(false);
-      }
+    }
+  }, [history, user]);
+
+  // --- Auto-Save Logic (Debounced) ---
+  useEffect(() => {
+    if (!user || !autoSaveEnabled) return;
+
+    const timeoutId = setTimeout(() => {
+        saveData();
     }, 2000); // Auto-save 2 seconds after last change
 
     return () => clearTimeout(timeoutId);
-  }, [history, user]);
+  }, [history, user, autoSaveEnabled, saveData]);
 
   const handleLogin = (loggedInUser: User, loadedHistory: HistoryState) => {
     setUser(loggedInUser);
     setHistory(loadedHistory);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setHistory({});
+    setActiveTab('dashboard');
+    // Optional: clear any persisted tokens if you implement 'keep me logged in'
   };
 
   // Derived date string key
@@ -239,7 +255,7 @@ const App: React.FC = () => {
               <span className="text-lg font-bold text-white">S</span>
             </div>
             <div>
-                 <h1 className="text-sm font-bold tracking-widest text-white uppercase font-mono">Player Status</h1>
+                 <h1 className="text-sm font-bold tracking-widest text-white uppercase font-mono hidden sm:block">Player Status</h1>
                  <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest flex items-center gap-1">
                     Level {ironLevel} 
                     {(user.token === 'offline-token' || user.token === 'admin-bypass-token') && <span className="text-slate-500 ml-1">(LOCAL)</span>}
@@ -248,24 +264,45 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-3">
-             <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-500">
-               {isSyncing ? (
-                 <>
-                   <Save className="w-3 h-3 animate-bounce" />
-                   SYNCING...
-                 </>
-               ) : lastSaved ? (
-                 <>
-                   {(user.token === 'offline-token' || user.token === 'admin-bypass-token') ? <WifiOff className="w-3 h-3 text-slate-500" /> : <CheckCircle className="w-3 h-3 text-emerald-500" />}
-                   SAVED
-                 </>
-               ) : null}
-             </div>
-             {!isToday && activeTab === 'dashboard' && (
-                <button onClick={() => setSelectedDate(new Date())} className="text-[10px] bg-void-900 px-3 py-1 rounded border border-purple-500/50 text-purple-300 font-bold uppercase hover:bg-purple-900/20">
-                    Return to Present
-                </button>
-             )}
+            
+             {/* Auto-Save Toggle */}
+             <button 
+                onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 transition-all"
+                title={autoSaveEnabled ? "Auto-Save Active" : "Auto-Save Disabled"}
+             >
+                <div className={`w-2 h-2 rounded-full ${autoSaveEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className="text-[10px] font-mono font-bold uppercase text-slate-400 hidden sm:block">
+                    {autoSaveEnabled ? 'Auto-Save' : 'Manual'}
+                </span>
+             </button>
+
+             {/* Manual Save Button */}
+             <button 
+                onClick={saveData}
+                disabled={isSyncing}
+                className="p-2 rounded-lg border border-slate-800 bg-void-900 text-purple-500 hover:text-white hover:bg-purple-600 hover:border-purple-500 transition-all shadow-lg"
+                title="Save Progress"
+             >
+                {isSyncing ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                    <Save className="w-4 h-4" />
+                )}
+             </button>
+
+            {/* Separator */}
+            <div className="w-px h-8 bg-slate-800 mx-1" />
+
+            {/* Logout */}
+             <button 
+                onClick={handleLogout} 
+                className="p-2 bg-red-950/20 hover:bg-red-900/40 text-red-500 rounded-lg transition-all border border-red-900/30"
+                title="Disconnect System"
+             >
+                <LogOut className="w-4 h-4" />
+             </button>
+
           </div>
         </div>
       </header>

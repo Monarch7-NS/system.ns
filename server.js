@@ -1,9 +1,9 @@
 
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const PORT = 5000;
@@ -11,21 +11,21 @@ const JWT_SECRET = 'system-secret-key-change-this-in-prod';
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased limit for large history data
 
 // User Schema & Model
+// 'minimize: false' is CRITICAL. Without it, Mongoose discards empty objects, causing data loss.
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    history: { type: Object, default: {} } // Stores the HistoryState
-});
+    history: { type: mongoose.Schema.Types.Mixed, default: {} } 
+}, { minimize: false, strict: false });
 
 const User = mongoose.model('User', UserSchema);
 
 // MongoDB Connection
-// Change this string if your local DB has a different name
-mongoose.connect('mongodb://localhost:27017/system_db')
-    .then(() => console.log('MongoDB Connected'))
+mongoose.connect('mongodb://127.0.0.1:27017/system_db')
+    .then(() => console.log('MongoDB Connected Successfully'))
     .catch(err => console.log('MongoDB Connection Error:', err));
 
 // Auth Routes
@@ -36,7 +36,7 @@ app.post('/api/auth/register', async (req, res) => {
         if (existingUser) return res.status(400).json({ message: 'User already exists' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ username, password: hashedPassword });
+        const newUser = new User({ username, password: hashedPassword, history: {} });
         await newUser.save();
 
         const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
@@ -46,6 +46,7 @@ app.post('/api/auth/register', async (req, res) => {
             history: newUser.history
         });
     } catch (err) {
+        console.error("Register Error:", err);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -63,9 +64,10 @@ app.post('/api/auth/login', async (req, res) => {
         res.json({ 
             token, 
             user: { id: user._id, username: user.username },
-            history: user.history
+            history: user.history || {}
         });
     } catch (err) {
+        console.error("Login Error:", err);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -87,8 +89,10 @@ const authMiddleware = (req, res, next) => {
 app.get('/api/data', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        res.json({ history: user.history });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        res.json({ history: user.history || {} });
     } catch (err) {
+        console.error("Get Data Error:", err);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -96,9 +100,21 @@ app.get('/api/data', authMiddleware, async (req, res) => {
 app.post('/api/data/sync', authMiddleware, async (req, res) => {
     try {
         const { history } = req.body;
-        await User.findByIdAndUpdate(req.user.id, { history });
+        
+        // Use $set to strictly replace the history field
+        // { new: true } returns the updated document (useful for debugging)
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user.id, 
+            { $set: { history: history } }, 
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) return res.status(404).json({ message: 'User not found' });
+
+        console.log(`[Sync] Data saved for user: ${updatedUser.username} | Keys: ${Object.keys(history).length}`);
         res.json({ success: true });
     } catch (err) {
+        console.error("Sync Error:", err);
         res.status(500).json({ message: 'Server error' });
     }
 });

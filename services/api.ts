@@ -1,7 +1,8 @@
 
 import { HistoryState, AuthResponse } from '../types';
 
-const API_URL = 'http://localhost:5000/api';
+// Changing from localhost to 127.0.0.1 can fix 1-2 second delays on some OS configurations (IPv6 lookup issues)
+const API_URL = 'http://127.0.0.1:5000/api';
 
 const getHeaders = (token: string) => ({
   'Content-Type': 'application/json',

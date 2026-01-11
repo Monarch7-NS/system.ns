@@ -13,7 +13,12 @@
     "react": "^19.2.3",
     "@google/genai": "^1.35.0",
     "recharts": "^3.6.0",
-    "lucide-react": "^0.562.0"
+    "lucide-react": "^0.562.0",
+    "express": "^5.2.1",
+    "mongoose": "^9.1.2",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
