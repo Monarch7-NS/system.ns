@@ -10,11 +10,39 @@ const PORT = 5000;
 const JWT_SECRET = 'system-secret-key-change-this-in-prod';
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Increased limit for large history data
+
+// 1. CORS: Allow ALL origins (Vercel, Phones, Localhost)
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json({ limit: '50mb' }));
+
+// 2. Logging: Print every request to the terminal so you know if the phone reached the computer
+app.use((req, res, next) => {
+    console.log(`[INCOMING] ${req.method} ${req.url} from ${req.ip}`);
+    next();
+});
+
+// Root Route: For checking if server is alive via Browser/Ngrok
+app.get('/', (req, res) => {
+    res.send(`
+        <div style="font-family: monospace; background: #05020a; color: #a855f7; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <h1>SYSTEM SERVER ONLINE</h1>
+            <p style="color: #e2e8f0;">Status: Operational</p>
+            <p style="color: #64748b;">Endpoint: /api</p>
+        </div>
+    `);
+});
+
+// Health Check Endpoint for App
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'online', system: 'operational' });
+});
 
 // User Schema & Model
-// 'minimize: false' is CRITICAL. Without it, Mongoose discards empty objects, causing data loss.
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
     password: { type: String, required: true },
@@ -40,6 +68,7 @@ app.post('/api/auth/register', async (req, res) => {
         await newUser.save();
 
         const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
+        console.log(`[REGISTER] Success: ${username}`);
         res.status(201).json({ 
             token, 
             user: { id: newUser._id, username: newUser.username },
@@ -61,6 +90,7 @@ app.post('/api/auth/login', async (req, res) => {
         if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
         const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+        console.log(`[LOGIN] Success: ${username}`);
         res.json({ 
             token, 
             user: { id: user._id, username: user.username },
@@ -100,9 +130,6 @@ app.get('/api/data', authMiddleware, async (req, res) => {
 app.post('/api/data/sync', authMiddleware, async (req, res) => {
     try {
         const { history } = req.body;
-        
-        // Use $set to strictly replace the history field
-        // { new: true } returns the updated document (useful for debugging)
         const updatedUser = await User.findByIdAndUpdate(
             req.user.id, 
             { $set: { history: history } }, 
@@ -111,7 +138,7 @@ app.post('/api/data/sync', authMiddleware, async (req, res) => {
 
         if (!updatedUser) return res.status(404).json({ message: 'User not found' });
 
-        console.log(`[Sync] Data saved for user: ${updatedUser.username} | Keys: ${Object.keys(history).length}`);
+        console.log(`[SYNC] Saved for: ${updatedUser.username} | Size: ${JSON.stringify(history).length} bytes`);
         res.json({ success: true });
     } catch (err) {
         console.error("Sync Error:", err);
@@ -119,4 +146,11 @@ app.post('/api/data/sync', authMiddleware, async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Listen on 0.0.0.0 to accept connections from outside the computer (Local Network)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n--- SYSTEM SERVER ONLINE ---`);
+    console.log(`> Local:   http://localhost:${PORT}`);
+    console.log(`> Network: Ensure you use your computer's IP (e.g. 192.168.1.5)`);
+    console.log(`> Vercel:  You MUST use Ngrok for Vercel to reach this server.`);
+    console.log(`----------------------------\n`);
+});

@@ -1,8 +1,18 @@
 
 import { HistoryState, AuthResponse } from '../types';
 
-// Changing from localhost to 127.0.0.1 can fix 1-2 second delays on some OS configurations (IPv6 lookup issues)
-const API_URL = 'http://127.0.0.1:5000/api';
+// Default to localhost, but allow overriding via localStorage for phone/remote access
+const DEFAULT_API_URL = 'http://127.0.0.1:5000/api';
+
+export const getApiUrl = () => {
+  return localStorage.getItem('system_api_url') || DEFAULT_API_URL;
+};
+
+export const setApiUrl = (url: string) => {
+  // Ensure no trailing slash
+  const cleanUrl = url.replace(/\/$/, '');
+  localStorage.setItem('system_api_url', cleanUrl);
+};
 
 const getHeaders = (token: string) => ({
   'Content-Type': 'application/json',
@@ -12,7 +22,8 @@ const getHeaders = (token: string) => ({
 export const api = {
   login: async (username: string, password: string): Promise<AuthResponse> => {
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -23,8 +34,8 @@ export const api = {
       }
       return res.json();
     } catch (error: any) {
-      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-        throw new Error('Failed to fetch: Check if server is running on localhost:5000');
+      if (error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message.includes('Network'))) {
+        throw new Error(`Connection refused to ${getApiUrl()}. Check Server Settings.`);
       }
       throw error;
     }
@@ -32,7 +43,8 @@ export const api = {
 
   register: async (username: string, password: string): Promise<AuthResponse> => {
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -43,15 +55,16 @@ export const api = {
       }
       return res.json();
     } catch (error: any) {
-      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-         throw new Error('Failed to fetch: Check if server is running on localhost:5000');
+       if (error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message.includes('Network'))) {
+        throw new Error(`Connection refused to ${getApiUrl()}. Check Server Settings.`);
       }
       throw error;
     }
   },
 
   syncData: async (token: string, history: HistoryState): Promise<{ success: boolean }> => {
-    const res = await fetch(`${API_URL}/data/sync`, {
+    const baseUrl = getApiUrl();
+    const res = await fetch(`${baseUrl}/data/sync`, {
       method: 'POST',
       headers: getHeaders(token),
       body: JSON.stringify({ history }),
@@ -61,7 +74,8 @@ export const api = {
   },
 
   getData: async (token: string): Promise<{ history: HistoryState }> => {
-    const res = await fetch(`${API_URL}/data`, {
+    const baseUrl = getApiUrl();
+    const res = await fetch(`${baseUrl}/data`, {
       method: 'GET',
       headers: getHeaders(token),
     });
